@@ -55,10 +55,11 @@ def count_hands_fingers(landmarks_list):
         # Get the finger count for this hand
         finger_count = count_fingers(hand_landmarks)
 
+#inverse to get accurate hand
         if hand_info.classification[0].label == "Left":
-            finger_counts["Left"] = finger_count
-        else:
             finger_counts["Right"] = finger_count
+        else:
+            finger_counts["Left"] = finger_count
 
     return finger_counts
 
