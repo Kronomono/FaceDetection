@@ -1,9 +1,48 @@
 import cv2
+import mediapipe as mp
 
-def display_camera_with_facial_features():
-    # Load the pre-trained Haar Cascade classifiers for face and eyes detection
-    face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-    eye_cascade = cv2.CascadeClassifier("haarcascade_eye.xml")
+import math
+
+def calculate_angle(finger_tip, finger_base, palm):
+    # Calculate the vectors for finger_tip to finger_base and finger_tip to palm
+    vec1 = [finger_tip.x - finger_base.x, finger_tip.y - finger_base.y]
+    vec2 = [finger_tip.x - palm.x, finger_tip.y - palm.y]
+
+    # Calculate the angle between the two vectors
+    dot_product = vec1[0] * vec2[0] + vec1[1] * vec2[1]
+    magnitude_product = math.sqrt(vec1[0]**2 + vec1[1]**2) * math.sqrt(vec2[0]**2 + vec2[1]**2)
+    angle_rad = math.acos(dot_product / magnitude_product)
+    angle_deg = math.degrees(angle_rad)
+
+    return angle_deg
+
+
+def count_fingers(landmarks):
+    # Indices of finger tip landmarks in the hand landmarks list
+    tip_indices = [4, 8, 12, 16, 20]
+
+    # Count the number of fingers that are "up"
+    finger_count = 0
+
+    # Check the angle between adjacent fingers
+    for i in range(1, len(tip_indices)):
+        finger_tip = landmarks[tip_indices[i]]
+        finger_base = landmarks[tip_indices[i] - 2]
+        palm = landmarks[0]  # Landmark for the center of the palm
+
+        # Calculate the angle between the finger tip, finger base, and palm
+        angle = calculate_angle(finger_tip, finger_base, palm)
+
+        # Use a threshold angle to determine if the finger is raised or not
+        # Adjust this threshold as needed based on your hand and camera setup
+        threshold_angle = 100  # You can try different values here
+        if angle < threshold_angle:
+            finger_count += 1
+
+    return finger_count
+def display_camera_with_finger_detection():
+    # Load Mediapipe hand tracking module
+    mp_hands = mp.solutions.hands
 
     # Open the default camera (usually the first camera in the system)
     cap = cv2.VideoCapture(0)
@@ -12,43 +51,44 @@ def display_camera_with_facial_features():
         print("Error: Unable to access the camera.")
         return
 
-    while True:
-        # Capture frame-by-frame
-        ret, frame = cap.read()
+    # Initialize Mediapipe hand tracking
+    with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+        while True:
+            # Capture frame-by-frame
+            ret, frame = cap.read()
 
-        if not ret:
-            print("Error: Unable to capture frame.")
-            break
+            if not ret:
+                print("Error: Unable to capture frame.")
+                break
 
-        # Convert the frame to grayscale (facial recognition requires grayscale images)
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Convert the frame from BGR to RGB format (required by Mediapipe)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # Detect faces in the frame
-        faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            # Process the frame with Mediapipe hand tracking
+            results = hands.process(rgb_frame)
 
-        # Draw rectangles around the detected faces and eyes
-        for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            # Check if hand(s) are detected
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    # Draw landmarks on the frame
+                    for landmark in hand_landmarks.landmark:
+                        x, y = int(landmark.x * frame.shape[1]), int(landmark.y * frame.shape[0])
+                        cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
 
-            # Region of Interest (ROI) within the face for eyes detection
-            roi_gray = gray_frame[y:y + h, x:x + w]
-            roi_color = frame[y:y + h, x:x + w]
+                    # Count fingers and display the count
+                    finger_count = count_fingers(hand_landmarks.landmark)
+                    cv2.putText(frame, f"Fingers: {finger_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-            # Detect eyes in the ROI
-            eyes = eye_cascade.detectMultiScale(roi_gray)
-            for (ex, ey, ew, eh) in eyes:
-                cv2.rectangle(roi_color, (ex, ey), (ex + ew, ey + eh), (255, 0, 0), 2)
+            # Display the frame with finger detection
+            cv2.imshow("Camera Footage with Finger Detection", frame)
 
-        # Display the frame with facial features
-        cv2.imshow("Camera Footage with Facial Features", frame)
-
-        # Wait for 1 millisecond and check if 'q' key is pressed to exit
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            # Wait for 1 millisecond and check if 'q' key is pressed to exit
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     # Release the camera and close all OpenCV windows
     cap.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    display_camera_with_facial_features()
+    display_camera_with_finger_detection()
