@@ -25,17 +25,22 @@ def count_fingers(landmarks):
     finger_count = 0
 
     # Check the angle between adjacent fingers
-    for i in range(1, len(tip_indices)):
+    for i in range(len(tip_indices)):
         finger_tip = landmarks[tip_indices[i]]
-        finger_base = landmarks[tip_indices[i] - 2]
+
+        if i == 0:  # thumb
+            finger_base = landmarks[tip_indices[i] - 1]
+            threshold_angle = 40  # Adjust this value for thumb if necessary
+        else:
+            finger_base = landmarks[tip_indices[i] - 2]
+            threshold_angle = 90  # For other fingers
+
         palm = landmarks[0]  # Landmark for the center of the palm
 
         # Calculate the angle between the finger tip, finger base, and palm
         angle = calculate_angle(finger_tip, finger_base, palm)
 
-        # Use a threshold angle to determine if the finger is raised or not
-        # Adjust this threshold as needed based on your hand and camera setup
-        threshold_angle = 100  # You can try different values here
+        # Check the threshold angle to determine if the finger is raised or not
         if angle < threshold_angle:
             finger_count += 1
 
