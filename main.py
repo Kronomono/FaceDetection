@@ -26,16 +26,16 @@ def count_fingers(landmarks):
 
     # Check the angle between adjacent fingers
     for i in range(len(tip_indices)):
-        finger_tip = landmarks[tip_indices[i]]
+        finger_tip = landmarks.landmark[tip_indices[i]]
 
         if i == 0:  # thumb
-            finger_base = landmarks[tip_indices[i] - 1]
+            finger_base = landmarks.landmark[tip_indices[i] - 1]
             threshold_angle = 40  # Adjust this value for thumb if necessary
         else:
-            finger_base = landmarks[tip_indices[i] - 2]
+            finger_base = landmarks.landmark[tip_indices[i] - 2]
             threshold_angle = 90  # For other fingers
 
-        palm = landmarks[0]  # Landmark for the center of the palm
+        palm = landmarks.landmark[0]  # Landmark for the center of the palm
 
         # Calculate the angle between the finger tip, finger base, and palm
         angle = calculate_angle(finger_tip, finger_base, palm)
@@ -45,6 +45,24 @@ def count_fingers(landmarks):
             finger_count += 1
 
     return finger_count
+
+
+def count_hands_fingers(landmarks_list):
+    # This function will return a dictionary with separate counts for left and right hands
+    finger_counts = {"Left": 0, "Right": 0}
+
+    for hand_landmarks, hand_info in landmarks_list:
+        # Get the finger count for this hand
+        finger_count = count_fingers(hand_landmarks)
+
+        if hand_info.classification[0].label == "Left":
+            finger_counts["Left"] = finger_count
+        else:
+            finger_counts["Right"] = finger_count
+
+    return finger_counts
+
+
 def display_camera_with_finger_detection():
     # Load Mediapipe hand tracking module
     mp_hands = mp.solutions.hands
@@ -59,32 +77,38 @@ def display_camera_with_finger_detection():
     # Initialize Mediapipe hand tracking
     with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
         while True:
-            # Capture frame-by-frame
             ret, frame = cap.read()
 
             if not ret:
                 print("Error: Unable to capture frame.")
                 break
 
-            # Convert the frame from BGR to RGB format (required by Mediapipe)
+            # Convert the frame from BGR to RGB format
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Process the frame with Mediapipe hand tracking
+            # Process the frame
             results = hands.process(rgb_frame)
 
             # Check if hand(s) are detected
-            if results.multi_hand_landmarks:
+            if results.multi_hand_landmarks and results.multi_handedness:
+                # Zip the landmarks and hand info for easier access
+                zipped_info = zip(results.multi_hand_landmarks, results.multi_handedness)
+
+                # Get the counts for both hands
+                finger_counts = count_hands_fingers(zipped_info)
+
                 for hand_landmarks in results.multi_hand_landmarks:
-                    # Draw landmarks on the frame
                     for landmark in hand_landmarks.landmark:
                         x, y = int(landmark.x * frame.shape[1]), int(landmark.y * frame.shape[0])
                         cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
 
-                    # Count fingers and display the count
-                    finger_count = count_fingers(hand_landmarks.landmark)
-                    cv2.putText(frame, f"Fingers: {finger_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # Display the counts for both hands
+                cv2.putText(frame, f"Left Hand Fingers: {finger_counts['Left']}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                            (0, 255, 0), 2)
+                cv2.putText(frame, f"Right Hand Fingers: {finger_counts['Right']}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX,
+                            1, (0, 255, 0), 2)
 
-            # Display the frame with finger detection
+            # Display the frame
             cv2.imshow("Camera Footage with Finger Detection", frame)
 
             # Wait for 1 millisecond and check if 'q' key is pressed to exit
@@ -94,6 +118,7 @@ def display_camera_with_finger_detection():
     # Release the camera and close all OpenCV windows
     cap.release()
     cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     display_camera_with_finger_detection()
